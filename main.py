@@ -3,7 +3,10 @@ from tempfile import NamedTemporaryFile
 import streamlit as st
 from pypdf import PdfWriter, PdfReader
 import pdf2image
+import streamlit_analytics
+from dotenv import load_dotenv
 
+load_dotenv(verbose=True)
 
 def add_img_to_pdf(img, output_pdf):
     f = NamedTemporaryFile(delete=False)
@@ -127,42 +130,43 @@ def split_pdf(
 
 
 def st_main():
-    st.markdown("# split_pdf")
-    st.markdown("")
-    st.markdown("見開きでスキャンされたPDFを分割し、表紙をつけて冊子形式で印刷できるようにします。")
+    with streamlit_analytics.track(unsafe_password=os.environ.get("ANALYTICS_KEY","")):
+        st.markdown("# split_pdf")
+        st.markdown("")
+        st.markdown("見開きでスキャンされたPDFを分割し、表紙をつけて冊子形式で印刷できるようにします。")
 
-    file = st.file_uploader("PDFをアップロードしてください.", type=["pdf"])
-    if file:
-        st.markdown(f"変換前")
-        images = load_pdf(file.name, file.read())
+        file = st.file_uploader("PDFをアップロードしてください.", type=["pdf"])
+        if file:
+            st.markdown(f"変換前")
+            images = load_pdf(file.name, file.read())
 
-        with st.form("my_form"):
-            divide_direction = st.radio(
-                "ページの分割方法", ("自動", "左右に分割", "上下に分割"), horizontal=True
-            )
-            use_1stpage_as_cover = st.checkbox("1ページ目を表紙として扱う", value=False)
-
-            right_to_left = st.checkbox(
-                "右側の方が若いページ", value=False
-            )
-            submitted = st.form_submit_button("PDF生成")
-
-        # PDFを分割
-        if submitted:
-            with st.spinner(f"{file.name} を変換中"):
-                converted_name = split_pdf(
-                    file.name,
-                    images,
-                    divide_direction=str(divide_direction),
-                    use_1stpage_as_cover=use_1stpage_as_cover,
-                    right_to_left=right_to_left,
+            with st.form("my_form"):
+                divide_direction = st.radio(
+                    "ページの分割方法", ("自動", "左右に分割", "上下に分割"), horizontal=True
                 )
+                use_1stpage_as_cover = st.checkbox("1ページ目を表紙として扱う", value=False)
 
-            st.markdown("変換後")
-            preview_pdf(converted_name, None, 3)
-            st.markdown(f"ダウンロード後、両面印刷か2in1で印刷してください。")
-            with open(converted_name, "br") as f:
-                st.download_button("ダウンロード", f, converted_name)
+                right_to_left = st.checkbox(
+                    "右側の方が若いページ", value=False
+                )
+                submitted = st.form_submit_button("PDF生成")
+
+            # PDFを分割
+            if submitted:
+                with st.spinner(f"{file.name} を変換中"):
+                    converted_name = split_pdf(
+                        file.name,
+                        images,
+                        divide_direction=str(divide_direction),
+                        use_1stpage_as_cover=use_1stpage_as_cover,
+                        right_to_left=right_to_left,
+                    )
+
+                st.markdown("変換後")
+                preview_pdf(converted_name, None, 3)
+                st.markdown(f"ダウンロード後、両面印刷か2in1で印刷してください。")
+                with open(converted_name, "br") as f:
+                    st.download_button("ダウンロード", f, converted_name)
 
 
 if __name__ == "__main__":
