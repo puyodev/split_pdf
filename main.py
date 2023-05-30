@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv(verbose=True)
 
+
 def add_img_to_pdf(img, output_pdf):
     f = NamedTemporaryFile(delete=False)
     try:
@@ -22,51 +23,31 @@ def add_img_to_pdf(img, output_pdf):
 
 
 @st.cache_data
-def load_pdf(input_path, pdf_bytes=None):
-    if pdf_bytes != None:
-        images = pdf2image.convert_from_bytes(pdf_bytes)
-    else:
-        images = pdf2image.convert_from_path(input_path)
-    cols = st.columns(min(len(images), 2))
-    for i, c in enumerate(cols):
-        with c:
-            st.image(images[i], caption=f"ページ{i+1}")
+def load_pdf(pdf_bytes):
+    images = pdf2image.convert_from_bytes(pdf_bytes)
     return images
 
-def preview_pdf(input_path, pdf_bytes=None, pages=2):
-    if pdf_bytes != None:
-        images = pdf2image.convert_from_bytes(pdf_bytes, dpi = 50, last_page=pages)
-    else:
-        images = pdf2image.convert_from_path(input_path, dpi = 50, last_page=pages)
-    preview_cols=3
+
+def preview_images(images, first_page=0, pages=2):
+    preview_cols = 2
     cols = st.columns(preview_cols)
-    for i, img in enumerate(images):
-        with cols[i%preview_cols]:
-            st.image(images[i], caption=f"ページ{i+1}")
+    for i, img in enumerate(images[first_page : first_page + pages]):
+        with cols[i % preview_cols]:
+            st.image(img, caption=f"ページ{i+first_page+1}", use_column_width="always")
     return images
 
 
-
-def split_pdf(
-    input_path,
-    _images,
-    divide_direction="左右",
-    use_1stpage_as_cover=False,
-    right_to_left=False,
+def split_images(
+    _images, divide_direction="左右", right_to_left=False, max_process_num=0
 ):
-    output_pdf = PdfWriter()
     initial_width = initial_height = 0
     processed_num = 0
     half_page = False
+    images = []
     if divide_direction == "自動":
-        horinetal_count = vertical_count = 0
-        for i, img in enumerate(_images):
-            width, height = img.size
-            if width < height:
-                horinetal_count += 1
-            else:
-                vertical_count += 1
-        divide_direction = "左右に分割" if horinetal_count < vertical_count else "上下に分割"
+        img = _images[1] if len(_images) > 1 else _images[0]
+        width, height = img.size
+        divide_direction = "上下に分割" if width < height else "左右に分割"
 
     # 1枚目だけサイズが異なる
     if len(_images) > 1 and (
@@ -74,13 +55,13 @@ def split_pdf(
     ):
         half_page = True
 
-    if not use_1stpage_as_cover:
-        if half_page:
-            # 1枚目だけサイズが異なるので強制的に表紙として使う
-            use_1stpage_as_cover = True
+    last_page = None
 
     for i, img in enumerate(_images):
         width, height = img.size
+
+        if max_process_num > 0 and i + 1 == max_process_num:
+            break
 
         def get_l_r():
             if divide_direction == "左右に分割":
@@ -97,12 +78,12 @@ def split_pdf(
                 return right_img, left_img
             return left_img, right_img
 
-        if i == 0 and use_1stpage_as_cover:
+        if i == 0:
             if half_page:
-                add_img_to_pdf(img, output_pdf)
+                images.append(img)
             else:
-                left_img, right_img = get_l_r()
-                add_img_to_pdf(right_img, output_pdf)
+                last_page, right_img = get_l_r()
+                images.append(right_img)
             processed_num += 1
             continue
 
@@ -114,56 +95,84 @@ def split_pdf(
                 break
         processed_num += 1
         left_img, right_img = get_l_r()
-        add_img_to_pdf(left_img, output_pdf)
-        if i == 0:
-            output_pdf.insert_blank_page(index=0)
-        add_img_to_pdf(right_img, output_pdf)
-    output_pdf.add_blank_page()
+        images.append(left_img)
+        images.append(right_img)
+    if last_page:
+        images.append(last_page)
     for img in _images[processed_num:]:
-        add_img_to_pdf(img, output_pdf)
+        images.append(img)
 
+    return images, processed_num
+
+
+def get_conv_file_name(input_path):
     file_name = os.path.splitext(os.path.basename(input_path))[0]
     converted_name = f"{file_name}_conv.pdf"
-    with open(converted_name, "wb") as f:
-        output_pdf.write(f)
     return converted_name
 
 
-def st_main():
-    with streamlit_analytics.track(unsafe_password=os.environ.get("ANALYTICS_KEY","")):
-        st.markdown("# split_pdf")
-        st.markdown("")
-        st.markdown("見開きでスキャンされたPDFを分割し、表紙をつけて冊子形式で印刷できるようにします。")
+def images_to_pdf(pdf_path, images):
+    output_pdf = PdfWriter()
+    for img in images:
+        add_img_to_pdf(img, output_pdf)
+    with open(pdf_path, "wb") as f:
+        output_pdf.write(f)
 
-        file = st.file_uploader("PDFをアップロードしてください.", type=["pdf"])
+
+def st_main():
+    with streamlit_analytics.track(unsafe_password=os.environ.get("ANALYTICS_KEY", "")):
+        st.markdown("# 見開きPDF分割君")
+        st.markdown("")
+        st.markdown("見開きでスキャンされたPDFを分割・順番入れ替えし、両面印刷で冊子として印刷できるPDFに変換します。")
+
+        file = st.file_uploader(
+            "PDFをアップロードしてください.", type=["pdf"], accept_multiple_files=False
+        )
+        max_size_mb = 20
         if file:
-            st.markdown(f"変換前")
-            images = load_pdf(file.name, file.read())
+            bytes = file.read()
+            if len(bytes) > max_size_mb * 1024 * 1024:
+                raise Exception(
+                    f"サイズが大きすぎます。{len(bytes)/1024/1024:.2f}MB / {max_size_mb}MB"
+                )
+            images = load_pdf(bytes)
+
+            with st.expander("詳細設定"):
+                st.markdown(f"変換前プレビュー")
+                preview_images(images, 0, 2)
+                divide_direction = st.radio(
+                    "分割の方向", ("自動", "左右に分割", "上下に分割"), horizontal=True
+                )
+
+                right_to_left = st.checkbox("右側の方が若いページ", value=False)
+
+                max_process_num = st.number_input(
+                    "分割するページの数(0は自動)", max_value=len(images), value=0, min_value=0
+                )
+
+                output_images, processed_num = split_images(
+                    images,
+                    divide_direction=str(divide_direction),
+                    right_to_left=right_to_left,
+                    max_process_num=int(max_process_num),
+                )
+
+                st.markdown("変換後プレビュー")
+                st.markdown("最初の2ページ")
+                preview_images(output_images, 0, 2)
+                if processed_num > 1:
+                    st.markdown("最後の2ページ")
+                    preview_images(output_images, processed_num * 2 - 2, 2)
 
             with st.form("my_form"):
-                divide_direction = st.radio(
-                    "ページの分割方法", ("自動", "左右に分割", "上下に分割"), horizontal=True
-                )
-                use_1stpage_as_cover = st.checkbox("1ページ目を表紙として扱う", value=False)
-
-                right_to_left = st.checkbox(
-                    "右側の方が若いページ", value=False
-                )
                 submitted = st.form_submit_button("PDF生成")
 
             # PDFを分割
             if submitted:
                 with st.spinner(f"{file.name} を変換中"):
-                    converted_name = split_pdf(
-                        file.name,
-                        images,
-                        divide_direction=str(divide_direction),
-                        use_1stpage_as_cover=use_1stpage_as_cover,
-                        right_to_left=right_to_left,
-                    )
+                    converted_name = get_conv_file_name(file.name)
+                    images_to_pdf(converted_name, images=output_images)
 
-                st.markdown("変換後")
-                preview_pdf(converted_name, None, 3)
                 st.markdown(f"ダウンロード後、両面印刷か2in1で印刷してください。")
                 with open(converted_name, "br") as f:
                     st.download_button("ダウンロード", f, converted_name)
