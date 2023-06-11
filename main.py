@@ -1,13 +1,13 @@
 import os
 from tempfile import NamedTemporaryFile
 import streamlit as st
+_orig_number_input = st.number_input
 from pypdf import PdfWriter, PdfReader
 import pdf2image
 import streamlit_analytics
 from dotenv import load_dotenv
 
 load_dotenv(verbose=True)
-
 
 def add_img_to_pdf(img, output_pdf):
     f = NamedTemporaryFile(delete=False)
@@ -120,7 +120,20 @@ def images_to_pdf(pdf_path, images):
 
 
 def st_main():
-    with streamlit_analytics.track(unsafe_password=os.environ.get("ANALYTICS_KEY", "")):
+
+    firebase_key_base64 = os.environ.get("FIREBASE_ACCESS_KEY", "")
+    import base64
+    firebase_key_str = base64.b64decode(firebase_key_base64.encode())
+
+    f = NamedTemporaryFile(delete=False)
+    with open("/tmp/firestore-key.json", "wb") as f:
+        f.write(firebase_key_str)
+
+    with streamlit_analytics.track(unsafe_password=os.environ.get("ANALYTICS_KEY", ""), firestore_key_file="/tmp/firestore-key.json", firestore_collection_name="counts"):
+
+        # firesrore保存時に例外になるのでオリジナルの関数に差し替え
+        st.number_input = _orig_number_input
+
         st.markdown("# 見開きPDF分割君")
         st.markdown("")
         st.markdown("見開きでスキャンされたPDFを分割・順番入れ替えし、両面印刷で冊子として印刷できるPDFに変換します。")
