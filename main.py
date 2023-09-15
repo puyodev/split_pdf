@@ -1,3 +1,5 @@
+import datetime
+import logging
 import os
 from tempfile import NamedTemporaryFile
 import streamlit as st
@@ -5,6 +7,9 @@ _orig_number_input = st.number_input
 from pypdf import PdfWriter, PdfReader
 import pdf2image
 import streamlit_analytics
+from streamlit import runtime
+from streamlit.runtime.scriptrunner import get_script_run_ctx
+from google.cloud import firestore
 from dotenv import load_dotenv
 
 load_dotenv(verbose=True)
@@ -22,7 +27,7 @@ def add_img_to_pdf(img, output_pdf):
         os.unlink(f.name)
 
 
-@st.cache_data
+@st.cache_data(max_entries=1)
 def load_pdf(pdf_bytes):
     images = pdf2image.convert_from_bytes(pdf_bytes)
     return images
@@ -118,6 +123,62 @@ def images_to_pdf(pdf_path, images):
     with open(pdf_path, "wb") as f:
         output_pdf.write(f)
 
+@st.cache_resource
+def get_firestore_db():
+    # Authenticate to Firestore with the JSON account key.
+    db = firestore.Client.from_service_account_json("/tmp/firestore-key.json")
+    return db
+
+def formatNow():
+    now = datetime.datetime.now()
+    return str(now)
+
+
+def get_remote_ip() -> str:
+    """Get remote ip."""
+
+    try:
+        ctx = get_script_run_ctx(True)
+        if ctx is None:
+            return None
+
+        session_info = runtime.get_instance().get_client(ctx.session_id)
+        if session_info is None:
+            return None
+    except Exception as e:
+        return None
+
+    return session_info.request.remote_ip
+
+# Firestoreにログを記録するカスタムロギングハンドラー
+class FirestoreHandler(logging.StreamHandler):
+    def emit(self, record):
+        message = self.format(record)
+        db = get_firestore_db()
+
+        if st.session_state.get(record.lineno):
+           return
+        
+        st.session_state[record.lineno] = 1
+
+        db.collection("logs").add({"created": f"{formatNow()}", "message": message, "ip": {get_remote_ip()}}, formatNow())
+        # ここで print や他のハンドラーを呼び出すこともできます
+        super().emit(record)
+
+def create_logger(level = 'DEBUG', file = None):
+    logger = logging.getLogger(__name__)
+    logger.propagate = False
+    logger.setLevel(level)
+    if sum([isinstance(handler, FirestoreHandler) for handler in logger.handlers]) == 0:
+        ch = FirestoreHandler()
+        logger.addHandler(ch)
+        
+    return logger
+
+@st.cache_resource
+def get_logger():
+    logger = create_logger(level = 'DEBUG')
+    return logger
 
 def st_main():
 
@@ -129,6 +190,9 @@ def st_main():
     with open("/tmp/firestore-key.json", "wb") as f:
         f.write(firebase_key_str)
 
+    logger = get_logger()
+    logger.info("display")
+    
     with streamlit_analytics.track(unsafe_password=os.environ.get("ANALYTICS_KEY", ""), firestore_key_file="/tmp/firestore-key.json", firestore_collection_name="counts"):
 
         # firesrore保存時に例外になるのでオリジナルの関数に差し替え
@@ -141,9 +205,12 @@ def st_main():
         file = st.file_uploader(
             "PDFをアップロードしてください.", type=["pdf"], accept_multiple_files=False
         )
-        max_size_mb = 20
+        max_size_mb = 100
+
         if file:
             bytes = file.read()
+            logger.info(f"filename:{file.name} size:{len(bytes)}")
+
             if len(bytes) > max_size_mb * 1024 * 1024:
                 raise Exception(
                     f"サイズが大きすぎます。{len(bytes)/1024/1024:.2f}MB / {max_size_mb}MB"
@@ -189,6 +256,7 @@ def st_main():
                 st.markdown(f"ダウンロード後、両面印刷か2in1で印刷してください。")
                 with open(converted_name, "br") as f:
                     st.download_button("ダウンロード", f, converted_name)
+                    logger.info({"converted": converted_name})
 
 
 if __name__ == "__main__":
