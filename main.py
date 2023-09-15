@@ -130,7 +130,8 @@ def get_firestore_db():
     return db
 
 def formatNow():
-    now = datetime.datetime.now()
+    JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
+    now = datetime.datetime.now(JST)
     return str(now)
 
 
