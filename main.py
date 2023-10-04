@@ -4,8 +4,10 @@ import os
 from tempfile import NamedTemporaryFile
 import streamlit as st
 _orig_number_input = st.number_input
+_orig_text_input = st.text_input
 from pypdf import PdfWriter, PdfReader
 import pdf2image
+from PIL import Image, ImageDraw, ImageFont
 import streamlit_analytics
 from streamlit import runtime
 from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -32,6 +34,14 @@ def load_pdf(pdf_bytes):
     images = pdf2image.convert_from_bytes(pdf_bytes)
     return images
 
+def create_image(width, height, str=""):
+    img = Image.new("RGB", (width, height),(255,255,255))
+    draw = ImageDraw.Draw(img)
+
+    fnt = ImageFont.truetype('./Kokoro.otf', 120) #ImageFontインスタンスを作る
+    draw.text((150,150), str, 'black', font=fnt)
+    return img
+
 
 def preview_images(images, first_page=0, pages=2):
     preview_cols = 2
@@ -43,7 +53,7 @@ def preview_images(images, first_page=0, pages=2):
 
 
 def split_images(
-    _images, divide_direction="左右", right_to_left=False, max_process_num=0
+    _images, divide_direction="左右", right_to_left=False, max_process_num=0, add_front_cover=True, front_cover_string=""
 ):
     initial_width = initial_height = 0
     processed_num = 0
@@ -88,6 +98,10 @@ def split_images(
                 images.append(img)
             else:
                 last_page, right_img = get_l_r()
+                if add_front_cover:
+                    images.append(create_image(last_page.width, last_page.height, front_cover_string))
+                    images.append(last_page)
+                    
                 images.append(right_img)
             processed_num += 1
             continue
@@ -198,6 +212,7 @@ def st_main():
 
         # firesrore保存時に例外になるのでオリジナルの関数に差し替え
         st.number_input = _orig_number_input
+        st.text_input = _orig_text_input
 
         st.markdown("# 見開きPDF分割君")
         st.markdown("")
@@ -224,6 +239,9 @@ def st_main():
                 divide_direction = st.radio(
                     "分割の方向", ("自動", "左右に分割", "上下に分割"), horizontal=True
                 )
+                add_front_cover = st.checkbox("表紙をつける", value=True)
+                basename_without_ext = os.path.splitext(os.path.basename(file.name))[0]
+                front_cover_string = st.text_input("表紙の文言", basename_without_ext)
 
                 right_to_left = st.checkbox("右側の方が若いページ", value=False)
 
@@ -236,6 +254,8 @@ def st_main():
                     divide_direction=str(divide_direction),
                     right_to_left=right_to_left,
                     max_process_num=int(max_process_num),
+                    add_front_cover=add_front_cover,
+                    front_cover_string=front_cover_string
                 )
 
                 st.markdown("変換後プレビュー")
