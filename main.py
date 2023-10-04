@@ -249,21 +249,21 @@ def st_main():
                     "分割するページの数(0は自動)", max_value=len(images), value=0, min_value=0
                 )
 
-                output_images, processed_num = split_images(
-                    images,
-                    divide_direction=str(divide_direction),
-                    right_to_left=right_to_left,
-                    max_process_num=int(max_process_num),
-                    add_front_cover=add_front_cover,
-                    front_cover_string=front_cover_string
-                )
+            output_images, processed_num = split_images(
+                images,
+                divide_direction=str(divide_direction),
+                right_to_left=right_to_left,
+                max_process_num=int(max_process_num),
+                add_front_cover=add_front_cover,
+                front_cover_string=front_cover_string
+            )
 
-                st.markdown("変換後プレビュー")
-                st.markdown("最初の2ページ")
-                preview_images(output_images, 0, 2)
-                if processed_num > 1:
-                    st.markdown("最後の2ページ")
-                    preview_images(output_images, processed_num * 2 - 2, 2)
+            st.markdown("変換後プレビュー")
+            st.markdown("最初の2ページ")
+            preview_images(output_images, 0, 2)
+            if processed_num > 1:
+                st.markdown("最後の2ページ")
+                preview_images(output_images, processed_num * 2 - 2, 2)
 
             with st.form("my_form"):
                 submitted = st.form_submit_button("PDF生成")
