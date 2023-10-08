@@ -285,6 +285,7 @@ def st_main():
 
             with st.form("my_form"):
                 st.markdown("この内容でよければ、PDF生成を押してください。")
+                st.markdown("調整が必要な場合は、詳細設定を押してください。")
                 submitted = st.form_submit_button("PDF生成")
 
             # PDFを分割
