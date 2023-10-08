@@ -250,7 +250,7 @@ def st_main():
                 divide_direction = st.radio(
                     "どのように分割しますか？", ("自動", "左右に分割", "上下に分割"), horizontal=True
                 )
-                add_front_cover = st.checkbox("表紙を作成してつけますか？", value=True, help="表紙を作成してつける場合はチェックしてください")
+                add_front_cover = st.checkbox("表紙を作成してつけますか？", value=True, help="PDFに表紙が含まれている場合は、二重に表紙が作成されてしまうのでチェックを外してください。")
                 basename_without_ext = os.path.splitext(os.path.basename(file.name))[0]
                 front_cover_string = st.text_input("作成する表紙の文言", basename_without_ext)
 
