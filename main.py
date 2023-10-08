@@ -99,11 +99,13 @@ def split_images(
             else:
                 last_page, right_img = get_l_r()
                 if add_front_cover:
+                    processed_num += 2
                     images.append(create_image(last_page.width, last_page.height, front_cover_string))
                     images.append(last_page)
+                    last_page = create_image(last_page.width, last_page.height, "")
                     
+                processed_num += 1
                 images.append(right_img)
-            processed_num += 1
             continue
 
         if initial_width == 0:
@@ -112,13 +114,15 @@ def split_images(
         else:
             if width != initial_width or height != initial_height:
                 break
-        processed_num += 1
+        
         left_img, right_img = get_l_r()
+        processed_num += 2
         images.append(left_img)
         images.append(right_img)
     if last_page:
+        processed_num += 1
         images.append(last_page)
-    for img in _images[processed_num:]:
+    for img in _images[i:]:
         images.append(img)
 
     return images, processed_num
@@ -234,19 +238,27 @@ def st_main():
             images = load_pdf(bytes)
 
             with st.expander("詳細設定"):
-                st.markdown(f"変換前プレビュー")
-                preview_images(images, 0, 2)
-                divide_direction = st.radio(
-                    "分割の方向", ("自動", "左右に分割", "上下に分割"), horizontal=True
-                )
-                add_front_cover = st.checkbox("表紙をつける", value=True)
-                basename_without_ext = os.path.splitext(os.path.basename(file.name))[0]
-                front_cover_string = st.text_input("表紙の文言", basename_without_ext)
+                st.markdown(f"変換前のPDFイメージ")
+                if len(images)<= 8:
+                    preview_images(images, 0, len(images))
+                else:
+                    st.markdown(f"最初の4ページ")
+                    preview_images(images, 0, 4)
+                    st.markdown(f"最後の4ページ")
+                    preview_images(images, len(images)-4, 4)
 
-                right_to_left = st.checkbox("右側の方が若いページ", value=False)
+                divide_direction = st.radio(
+                    "どのように分割しますか？", ("自動", "左右に分割", "上下に分割"), horizontal=True
+                )
+                add_front_cover = st.checkbox("表紙を作成してつけますか？", value=True, help="表紙を作成してつける場合はチェックしてください")
+                basename_without_ext = os.path.splitext(os.path.basename(file.name))[0]
+                front_cover_string = st.text_input("作成する表紙の文言", basename_without_ext)
+
+                st.markdown("国語の問題のように右側の方が若いページの場合はチェックを入れてください。")
+                right_to_left = st.checkbox("ページの左右の順番を逆にする", value=False)
 
                 max_process_num = st.number_input(
-                    "分割するページの数(0は自動)", max_value=len(images), value=0, min_value=0
+                    "何ページを分割しますか？(0は自動判定)", max_value=len(images), value=0, min_value=0
                 )
 
             output_images, processed_num = split_images(
@@ -257,15 +269,22 @@ def st_main():
                 add_front_cover=add_front_cover,
                 front_cover_string=front_cover_string
             )
+            
+            st.markdown("変換後のPDFイメージ")
 
-            st.markdown("変換後プレビュー")
-            st.markdown("最初の2ページ")
-            preview_images(output_images, 0, 2)
-            if processed_num > 1:
-                st.markdown("最後の2ページ")
-                preview_images(output_images, processed_num * 2 - 2, 2)
+            if processed_num <= 8:
+                preview_images(output_images, 0, processed_num)
+            else:
+                st.markdown("最初の4ページ")
+                preview_images(output_images, 0, 4)
+                st.markdown("最後の4ページ")
+                preview_images(output_images, processed_num - 4, 4)
+            if len(output_images)-processed_num > 0:
+                st.markdown("未変換ページ")
+                preview_images(output_images, processed_num, len(output_images)-processed_num)
 
             with st.form("my_form"):
+                st.markdown("この内容でよければ、PDF生成を押してください。")
                 submitted = st.form_submit_button("PDF生成")
 
             # PDFを分割
