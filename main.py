@@ -97,6 +97,7 @@ def split_images(
             if half_page:
                 images.append(img)
             else:
+                # print(f"{i} get_l_r")
                 last_page, right_img = get_l_r()
                 if add_front_cover:
                     processed_num += 2
@@ -114,11 +115,13 @@ def split_images(
         else:
             if width != initial_width or height != initial_height:
                 break
-        
+
+        # print(f"{i} get_l_r")
         left_img, right_img = get_l_r()
         processed_num += 2
         images.append(left_img)
         images.append(right_img)
+    # print(f"last_page {i} get_l_r")
     if last_page:
         processed_num += 1
         images.append(last_page)
@@ -219,7 +222,7 @@ def st_main():
         st.text_input = _orig_text_input
 
         st.markdown("# 見開きPDF分割君")
-        st.markdown("")
+        st.markdown("ver.0.9")
         st.markdown("見開きでスキャンされたPDFを分割・順番入れ替えし、両面印刷で冊子として印刷できるPDFに変換します。")
 
         file = st.file_uploader(
@@ -288,10 +291,10 @@ def st_main():
                 st.markdown("調整が必要な場合は、詳細設定を押してください。")
                 submitted = st.form_submit_button("PDF生成")
 
+            converted_name = get_conv_file_name(file.name)
             # PDFを分割
             if submitted:
                 with st.spinner(f"{file.name} を変換中"):
-                    converted_name = get_conv_file_name(file.name)
                     images_to_pdf(converted_name, images=output_images)
 
                 st.markdown(f"ダウンロード後、両面印刷か2in1で印刷してください。")
