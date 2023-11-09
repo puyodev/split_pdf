@@ -17,16 +17,12 @@ from dotenv import load_dotenv
 load_dotenv(verbose=True)
 
 def add_img_to_pdf(img, output_pdf):
-    f = NamedTemporaryFile(delete=False)
-    try:
-        with open(f.name, "wb") as f:
-            img.save(f, "PDF", resolution=100.0)
-        with open(f.name, "rb") as f:
-            input_pdf = PdfReader(f)
-            page = input_pdf.pages[0]
-            output_pdf.add_page(page)
-    finally:
-        os.unlink(f.name)
+    with NamedTemporaryFile() as f:
+        img.save(f, "PDF", resolution=100.0)
+        f.flush()
+        input_pdf = PdfReader(f.name)
+        page = input_pdf.pages[0]
+        output_pdf.add_page(page)
 
 
 @st.cache_data(max_entries=1)
