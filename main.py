@@ -17,12 +17,13 @@ from dotenv import load_dotenv
 load_dotenv(verbose=True)
 
 def add_img_to_pdf(img, output_pdf):
-    with NamedTemporaryFile() as f:
-        img.save(f, "PDF", resolution=100.0)
-        f.flush()
-        input_pdf = PdfReader(f.name)
+    with NamedTemporaryFile(delete=False) as tmpf:
+        img.save(tmpf, "PDF", resolution=100.0)
+    with open(tmpf.name, "rb") as tmpf2:
+        input_pdf = PdfReader(tmpf2)
         page = input_pdf.pages[0]
         output_pdf.add_page(page)
+    os.unlink(tmpf.name)
 
 
 @st.cache_data(max_entries=1)
@@ -218,7 +219,7 @@ def st_main():
         st.text_input = _orig_text_input
 
         st.markdown("# 見開きPDF分割君")
-        st.markdown("ver.0.91")
+        st.markdown("ver.0.92")
         st.markdown("見開きでスキャンされたPDFを分割・順番入れ替えし、両面印刷で冊子として印刷できるPDFに変換します。")
 
         file = st.file_uploader(
