@@ -218,7 +218,7 @@ def st_main():
         st.text_input = _orig_text_input
 
         st.markdown("# 見開きPDF分割君")
-        st.markdown("ver.0.9")
+        st.markdown("ver.0.91")
         st.markdown("見開きでスキャンされたPDFを分割・順番入れ替えし、両面印刷で冊子として印刷できるPDFに変換します。")
 
         file = st.file_uploader(
