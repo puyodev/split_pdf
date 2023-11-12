@@ -36,7 +36,8 @@ def create_image(width, height, str=""):
     draw = ImageDraw.Draw(img)
 
     fnt = ImageFont.truetype('./Kokoro.otf', 120) #ImageFontインスタンスを作る
-    draw.text((150,150), str, 'black', font=fnt)
+    _, _, w, h = draw.textbbox((0, 0), str, font=fnt)
+    draw.text(((width-w)/2, (height-h)/4), str, font=fnt, fill='black')
     return img
 
 
@@ -219,7 +220,7 @@ def st_main():
         st.text_input = _orig_text_input
 
         st.markdown("# 見開きPDF分割君")
-        st.markdown("ver.0.92")
+        st.markdown("ver.0.93")
         st.markdown("見開きでスキャンされたPDFを分割・順番入れ替えし、両面印刷で冊子として印刷できるPDFに変換します。")
 
         file = st.file_uploader(
