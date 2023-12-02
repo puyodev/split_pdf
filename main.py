@@ -2,10 +2,12 @@ import datetime
 import logging
 import os
 from tempfile import NamedTemporaryFile
+
+from typing import List, Tuple
 import streamlit as st
+
 _orig_number_input = st.number_input
 _orig_text_input = st.text_input
-from pypdf import PdfWriter, PdfReader
 import pdf2image
 from PIL import Image, ImageDraw, ImageFont
 import streamlit_analytics
@@ -15,33 +17,26 @@ from google.cloud import firestore
 from dotenv import load_dotenv
 
 load_dotenv(verbose=True)
-
-def add_img_to_pdf(img, output_pdf):
-    with NamedTemporaryFile(delete=False) as tmpf:
-        img.save(tmpf, "PDF", resolution=100.0)
-    with open(tmpf.name, "rb") as tmpf2:
-        input_pdf = PdfReader(tmpf2)
-        page = input_pdf.pages[0]
-        output_pdf.add_page(page)
-    os.unlink(tmpf.name)
+version_string = "ver.0.94"
 
 
 @st.cache_data(max_entries=1)
-def load_pdf(pdf_bytes):
+def load_pdf(pdf_bytes: bytes) -> List[Image.Image]:
     images = pdf2image.convert_from_bytes(pdf_bytes)
     return images
 
-def create_image(width, height, str=""):
-    img = Image.new("RGB", (width, height),(255,255,255))
+
+def create_image(width: int, height: int, str: str = "") -> Image:
+    img = Image.new("RGB", (width, height), (255, 255, 255))
     draw = ImageDraw.Draw(img)
 
-    fnt = ImageFont.truetype('./Kokoro.otf', 120) #ImageFontインスタンスを作る
+    fnt = ImageFont.truetype("./Kokoro.otf", 120)  # ImageFontインスタンスを作る
     _, _, w, h = draw.textbbox((0, 0), str, font=fnt)
-    draw.text(((width-w)/2, (height-h)/4), str, font=fnt, fill='black')
+    draw.text(((width - w) / 2, (height - h) / 4), str, font=fnt, fill="black")
     return img
 
 
-def preview_images(images, first_page=0, pages=2):
+def preview_images(images: List[Image.Image], first_page=0, pages=2):
     preview_cols = 2
     cols = st.columns(preview_cols)
     for i, img in enumerate(images[first_page : first_page + pages]):
@@ -51,8 +46,13 @@ def preview_images(images, first_page=0, pages=2):
 
 
 def split_images(
-    _images, divide_direction="左右", right_to_left=False, max_process_num=0, add_front_cover=True, front_cover_string=""
-):
+    _images: List[Image.Image],
+    divide_direction: str = "左右",
+    right_to_left: bool = False,
+    max_process_num: int = 0,
+    add_front_cover: bool = True,
+    front_cover_string: str = "",
+) -> Tuple[List[Image.Image], int]:
     initial_width = initial_height = 0
     processed_num = 0
     half_page = False
@@ -63,9 +63,7 @@ def split_images(
         divide_direction = "上下に分割" if width < height else "左右に分割"
 
     # 1枚目だけサイズが異なる
-    if len(_images) > 1 and (
-        _images[0].width != _images[1].width or _images[0].height != _images[1].height
-    ):
+    if len(_images) > 1 and (_images[0].width != _images[1].width or _images[0].height != _images[1].height):
         half_page = True
 
     last_page = None
@@ -102,7 +100,7 @@ def split_images(
                     images.append(create_image(last_page.width, last_page.height, front_cover_string))
                     images.append(last_page)
                     last_page = create_image(last_page.width, last_page.height, "")
-                    
+
                 processed_num += 1
                 images.append(right_img)
             continue
@@ -129,27 +127,25 @@ def split_images(
     return images, processed_num
 
 
-def get_conv_file_name(input_path):
+def get_conv_file_name(input_path: str) -> str:
     file_name = os.path.splitext(os.path.basename(input_path))[0]
     converted_name = f"{file_name}_conv.pdf"
     return converted_name
 
 
-def images_to_pdf(pdf_path, images):
-    output_pdf = PdfWriter()
-    for img in images:
-        add_img_to_pdf(img, output_pdf)
-    with open(pdf_path, "wb") as f:
-        output_pdf.write(f)
+def images_to_pdf(pdf_path: str, images: List[Image.Image]) -> None:
+    images[0].save(pdf_path, save_all=True, append_images=images[1:])
+
 
 @st.cache_resource
-def get_firestore_db():
+def get_firestore_db() -> firestore.Client:
     # Authenticate to Firestore with the JSON account key.
     db = firestore.Client.from_service_account_json("/tmp/firestore-key.json")
     return db
 
-def formatNow():
-    JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
+
+def formatNow() -> str:
+    JST = datetime.timezone(datetime.timedelta(hours=+9), "JST")
     now = datetime.datetime.now(JST)
     return str(now)
 
@@ -170,6 +166,7 @@ def get_remote_ip() -> str:
 
     return session_info.request.remote_ip
 
+
 # Firestoreにログを記録するカスタムロギングハンドラー
 class FirestoreHandler(logging.StreamHandler):
     def emit(self, record):
@@ -177,33 +174,38 @@ class FirestoreHandler(logging.StreamHandler):
         db = get_firestore_db()
 
         if st.session_state.get(record.lineno):
-           return
-        
+            return
+
         st.session_state[record.lineno] = 1
 
-        db.collection("logs").add({"created": f"{formatNow()}", "message": message, "ip": {get_remote_ip()}}, formatNow())
+        db.collection("logs").add(
+            {"created": f"{formatNow()}", "message": message, "ip": {get_remote_ip()}}, formatNow()
+        )
         # ここで print や他のハンドラーを呼び出すこともできます
         super().emit(record)
 
-def create_logger(level = 'DEBUG', file = None):
+
+def create_logger(level: str = "DEBUG", file: str = None) -> logging.Logger:
     logger = logging.getLogger(__name__)
     logger.propagate = False
     logger.setLevel(level)
     if sum([isinstance(handler, FirestoreHandler) for handler in logger.handlers]) == 0:
         ch = FirestoreHandler()
         logger.addHandler(ch)
-        
+
     return logger
+
 
 @st.cache_resource
-def get_logger():
-    logger = create_logger(level = 'DEBUG')
+def get_logger() -> logging.Logger:
+    logger = create_logger(level="DEBUG")
     return logger
 
-def st_main():
 
+def st_main() -> None:
     firebase_key_base64 = os.environ.get("FIREBASE_ACCESS_KEY", "")
     import base64
+
     firebase_key_str = base64.b64decode(firebase_key_base64.encode())
 
     f = NamedTemporaryFile(delete=False)
@@ -212,20 +214,21 @@ def st_main():
 
     logger = get_logger()
     logger.info("display")
-    
-    with streamlit_analytics.track(unsafe_password=os.environ.get("ANALYTICS_KEY", ""), firestore_key_file="/tmp/firestore-key.json", firestore_collection_name="counts"):
 
+    with streamlit_analytics.track(
+        unsafe_password=os.environ.get("ANALYTICS_KEY", ""),
+        firestore_key_file="/tmp/firestore-key.json",
+        firestore_collection_name="counts",
+    ):
         # firesrore保存時に例外になるのでオリジナルの関数に差し替え
         st.number_input = _orig_number_input
         st.text_input = _orig_text_input
 
         st.markdown("# 見開きPDF分割君")
-        st.markdown("ver.0.93")
+        st.markdown(version_string)
         st.markdown("見開きでスキャンされたPDFを分割・順番入れ替えし、両面印刷で冊子として印刷できるPDFに変換します。")
 
-        file = st.file_uploader(
-            "PDFをアップロードしてください.", type=["pdf"], accept_multiple_files=False
-        )
+        file = st.file_uploader("PDFをアップロードしてください.", type=["pdf"], accept_multiple_files=False)
         max_size_mb = 100
 
         if file:
@@ -233,34 +236,30 @@ def st_main():
             logger.info(f"filename:{file.name} size:{len(bytes)}")
 
             if len(bytes) > max_size_mb * 1024 * 1024:
-                raise Exception(
-                    f"サイズが大きすぎます。{len(bytes)/1024/1024:.2f}MB / {max_size_mb}MB"
-                )
+                raise Exception(f"サイズが大きすぎます。{len(bytes)/1024/1024:.2f}MB / {max_size_mb}MB")
             images = load_pdf(bytes)
 
             with st.expander("詳細設定"):
                 st.markdown(f"変換前のPDFイメージ")
-                if len(images)<= 8:
+                if len(images) <= 8:
                     preview_images(images, 0, len(images))
                 else:
                     st.markdown(f"最初の4ページ")
                     preview_images(images, 0, 4)
                     st.markdown(f"最後の4ページ")
-                    preview_images(images, len(images)-4, 4)
+                    preview_images(images, len(images) - 4, 4)
 
-                divide_direction = st.radio(
-                    "どのように分割しますか？", ("自動", "左右に分割", "上下に分割"), horizontal=True
+                divide_direction = st.radio("どのように分割しますか？", ("自動", "左右に分割", "上下に分割"), horizontal=True)
+                add_front_cover = st.checkbox(
+                    "表紙を作成してつけますか？", value=True, help="PDFに表紙が含まれている場合は、二重に表紙が作成されてしまうのでチェックを外してください。"
                 )
-                add_front_cover = st.checkbox("表紙を作成してつけますか？", value=True, help="PDFに表紙が含まれている場合は、二重に表紙が作成されてしまうのでチェックを外してください。")
                 basename_without_ext = os.path.splitext(os.path.basename(file.name))[0]
                 front_cover_string = st.text_input("作成する表紙の文言", basename_without_ext)
 
                 st.markdown("国語の問題のように右側の方が若いページの場合はチェックを入れてください。")
                 right_to_left = st.checkbox("ページの左右の順番を逆にする", value=False)
 
-                max_process_num = st.number_input(
-                    "何ページを分割しますか？(0は自動判定)", max_value=len(images), value=0, min_value=0
-                )
+                max_process_num = st.number_input("何ページを分割しますか？(0は自動判定)", max_value=len(images), value=0, min_value=0)
 
             output_images, processed_num = split_images(
                 images,
@@ -268,9 +267,9 @@ def st_main():
                 right_to_left=right_to_left,
                 max_process_num=int(max_process_num),
                 add_front_cover=add_front_cover,
-                front_cover_string=front_cover_string
+                front_cover_string=front_cover_string,
             )
-            
+
             st.markdown("変換後のPDFイメージ")
 
             if processed_num <= 8:
@@ -280,9 +279,9 @@ def st_main():
                 preview_images(output_images, 0, 4)
                 st.markdown("最後の4ページ")
                 preview_images(output_images, processed_num - 4, 4)
-            if len(output_images)-processed_num > 0:
+            if len(output_images) - processed_num > 0:
                 st.markdown("未変換ページ")
-                preview_images(output_images, processed_num, len(output_images)-processed_num)
+                preview_images(output_images, processed_num, len(output_images) - processed_num)
 
             with st.form("my_form"):
                 st.markdown("この内容でよければ、PDF生成を押してください。")
