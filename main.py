@@ -259,7 +259,9 @@ def st_main() -> None:
                 st.markdown("国語の問題のように右側の方が若いページの場合はチェックを入れてください。")
                 right_to_left = st.checkbox("ページの左右の順番を逆にする", value=False)
 
-                max_process_num = st.number_input("何ページを分割しますか？(0は自動判定)", max_value=len(images), value=0, min_value=0)
+                max_process_num = st.number_input(
+                    "1ページ目から何ページまでを分割対象としますか？(0は自動判定)", max_value=len(images), value=0, min_value=0
+                )
 
             output_images, processed_num = split_images(
                 images,
