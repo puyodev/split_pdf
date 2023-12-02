@@ -71,7 +71,7 @@ def split_images(
     for i, img in enumerate(_images):
         width, height = img.size
 
-        if max_process_num > 0 and i + 1 == max_process_num:
+        if max_process_num > 0 and i == max_process_num:
             break
 
         def get_l_r():
