@@ -260,7 +260,7 @@ def st_main() -> None:
                 right_to_left = st.checkbox("ページの左右の順番を逆にする", value=False)
 
                 max_process_num = st.number_input(
-                    "変換前のPDFで1ページ目から何ページまでを分割対象としますか？(0は自動判定)", max_value=len(images), value=0, min_value=0
+                    "変換前のPDFで1ページ目から何ページ目までを分割対象としますか？(0は自動判定)", max_value=len(images), value=0, min_value=0
                 )
 
             output_images, processed_num = split_images(
